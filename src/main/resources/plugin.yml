@@ -1,0 +1,42 @@
+name: RoyalEconomy
+version: ${version}
+main: com.mystipixel.royaleconomy.RoyalEconomyPlugin
+api-version: '26.2'
+author: Mystipixel
+# Keep these versions identical to the matching dependencies in pom.xml.
+libraries:
+  - org.xerial:sqlite-jdbc:3.53.4.0
+  - com.zaxxer:HikariCP:7.1.0
+  - com.mysql:mysql-connector-j:26.7.0
+depend:
+  - Vault
+commands:
+  balance:
+    description: Show your balance or another player's.
+    usage: /balance [player]
+    aliases: [bal, money]
+  pay:
+    description: Send money to another player.
+    usage: /pay <player> <amount>
+  baltop:
+    description: Show the richest players.
+    usage: /baltop [page]
+  eco:
+    description: RoyalEconomy admin command.
+    usage: /eco <give|take|set|reset|reload> [player] [amount]
+permissions:
+  royaleconomy.balance:
+    description: Use /balance.
+    default: true
+  royaleconomy.balance.others:
+    description: Look at another player's balance.
+    default: op
+  royaleconomy.pay:
+    description: Use /pay.
+    default: true
+  royaleconomy.baltop:
+    description: Use /baltop.
+    default: true
+  royaleconomy.admin:
+    description: Use /eco.
+    default: op

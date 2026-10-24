@@ -1,0 +1,34 @@
+database:
+  # sqlite or mysql
+  type: sqlite
+  # prefix for every table; letters, digits and underscores only
+  table-prefix: royaleconomy_
+  sqlite:
+    file: economy.db
+  mysql:
+    host: localhost
+    port: 3306
+    name: minecraft
+    user: root
+    password: ""
+    pool-size: 6
+
+currency:
+  singular: Coin
+  plural: Coins
+  # shown in front of formatted amounts
+  symbol: "$"
+  # digits after the decimal point, 0 to 4
+  fraction-digits: 2
+  starting-balance: 0.0
+  # smallest amount /pay accepts
+  min-pay: 0.01
+  # largest balance an account can hold, 0 for the limit of a long
+  max-balance: 0
+
+persistence:
+  # how often queued changes are written to the database, in ticks
+  flush-interval-ticks: 40
+  # how often the /baltop snapshot is rebuilt, in seconds
+  baltop-refresh-seconds: 60
+  baltop-page-size: 10
