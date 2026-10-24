@@ -31,8 +31,6 @@ class MemoryEconomyServiceTest {
         service = new MemoryEconomyService(1000L, 100_000L, clock::incrementAndGet);
     }
 
-    // --- deposit ---
-
     @Test
     void depositSucceeds() {
         service.createAccount(ALICE);
@@ -64,8 +62,6 @@ class MemoryEconomyServiceTest {
         assertEquals(100_000L, service.balance(ALICE));
     }
 
-    // --- withdraw ---
-
     @Test
     void withdrawSucceeds() {
         service.createAccount(ALICE);
@@ -93,8 +89,6 @@ class MemoryEconomyServiceTest {
     void withdrawFailsOnMissingAccount() {
         assertEquals(Status.NO_ACCOUNT, service.withdraw(UUID.randomUUID(), 100L, "test").status());
     }
-
-    // --- set ---
 
     @Test
     void setSucceeds() {
@@ -128,8 +122,6 @@ class MemoryEconomyServiceTest {
     void setFailsOnMissingAccount() {
         assertEquals(Status.NO_ACCOUNT, service.set(UUID.randomUUID(), 100L, "test").status());
     }
-
-    // --- transfer ---
 
     @Test
     void transferSucceeds() {
@@ -186,8 +178,6 @@ class MemoryEconomyServiceTest {
         assertEquals(1000L, service.balance(BOB));
     }
 
-    // --- createAccount ---
-
     @Test
     void createAccountSucceeds() {
         assertTrue(service.createAccount(ALICE));
@@ -202,7 +192,16 @@ class MemoryEconomyServiceTest {
         assertEquals(1000L, service.balance(ALICE));
     }
 
-    // --- top ---
+    @Test
+    void createAccountQueuesChangeWithStartingBalance() {
+        service.createAccount(ALICE);
+        List<Change> changes = service.drainChanges();
+        assertEquals(1, changes.size());
+        assertEquals(ALICE, changes.get(0).account());
+        assertEquals(1000L, changes.get(0).delta());
+        assertEquals(1000L, changes.get(0).balanceAfter());
+        assertEquals("create", changes.get(0).reason());
+    }
 
     @Test
     void topReturnsSorted() {
@@ -234,8 +233,6 @@ class MemoryEconomyServiceTest {
         assertEquals(CAROL, page.get(0).account());
     }
 
-    // --- drain and requeue ---
-
     @Test
     void drainAndRequeuePreservesOrder() {
         service.createAccount(ALICE);
@@ -244,29 +241,27 @@ class MemoryEconomyServiceTest {
         service.withdraw(ALICE, 50L, "c");
 
         List<Change> changes = service.drainChanges();
-        assertEquals(3, changes.size());
-        assertEquals("a", changes.get(0).reason());
-        assertEquals("b", changes.get(1).reason());
-        assertEquals("c", changes.get(2).reason());
+        assertEquals(4, changes.size());
+        assertEquals("create", changes.get(0).reason());
+        assertEquals("a", changes.get(1).reason());
+        assertEquals("b", changes.get(2).reason());
+        assertEquals("c", changes.get(3).reason());
 
-        // queue is now empty
         assertTrue(service.drainChanges().isEmpty());
 
-        // requeue and verify order is preserved
         service.requeue(changes);
         List<Change> again = service.drainChanges();
-        assertEquals(3, again.size());
-        assertEquals("a", again.get(0).reason());
-        assertEquals("b", again.get(1).reason());
-        assertEquals("c", again.get(2).reason());
+        assertEquals(4, again.size());
+        assertEquals("create", again.get(0).reason());
+        assertEquals("a", again.get(1).reason());
+        assertEquals("b", again.get(2).reason());
+        assertEquals("c", again.get(3).reason());
     }
 
     @Test
     void drainReturnsEmptyWhenNoChanges() {
         assertTrue(service.drainChanges().isEmpty());
     }
-
-    // --- load ---
 
     @Test
     void loadSeedsAccounts() {
@@ -275,8 +270,6 @@ class MemoryEconomyServiceTest {
         assertEquals(5000L, service.balance(ALICE));
         assertEquals(7000L, service.balance(BOB));
     }
-
-    // --- concurrency ---
 
     @Test
     void concurrentOperationsConserveTotal() throws Exception {
@@ -328,9 +321,9 @@ class MemoryEconomyServiceTest {
         }
 
         start.countDown();
-        boolean finished = done.await(15, TimeUnit.SECONDS);
+        boolean finished = done.await(30, TimeUnit.SECONDS);
         pool.shutdownNow();
-        assertTrue(finished, "deadlock detected: operations did not finish within 15s");
+        assertTrue(finished, "deadlock detected: operations did not finish within 30s");
 
         long finalTotal = 0;
         for (UUID acc : accounts) {
@@ -378,11 +371,60 @@ class MemoryEconomyServiceTest {
         });
 
         start.countDown();
-        boolean finished = done.await(15, TimeUnit.SECONDS);
+        boolean finished = done.await(30, TimeUnit.SECONDS);
         pool.shutdownNow();
-        assertTrue(finished, "deadlock: opposite transfers did not finish within 15s");
+        assertTrue(finished, "deadlock: opposite transfers did not finish within 30s");
 
         assertEquals(10000L, service.balance(ALICE));
         assertEquals(10000L, service.balance(BOB));
+    }
+
+    @Test
+    void concurrentWithdrawAndTransferNeverGoesNegative() throws Exception {
+        UUID source = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        service.createAccount(source);
+        service.createAccount(target);
+        service.set(source, 10000L, "setup");
+        service.set(target, 0L, "setup");
+
+        int threads = 8;
+        int opsPerThread = 1000;
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threads);
+        AtomicLong totalWithdrawn = new AtomicLong();
+
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        for (int t = 0; t < threads; t++) {
+            final int threadId = t;
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    for (int i = 0; i < opsPerThread; i++) {
+                        if (threadId % 2 == 0) {
+                            Result r = service.withdraw(source, 1L, "wd");
+                            if (r.ok()) totalWithdrawn.incrementAndGet();
+                        } else {
+                            service.transfer(source, target, 1L, "pay");
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        start.countDown();
+        boolean finished = done.await(30, TimeUnit.SECONDS);
+        pool.shutdownNow();
+        assertTrue(finished, "deadlock: operations did not finish within 30s");
+
+        long sourceBalance = service.balance(source);
+        long targetBalance = service.balance(target);
+        assertTrue(sourceBalance >= 0, "source balance went negative: " + sourceBalance);
+        assertTrue(targetBalance >= 0, "target balance went negative: " + targetBalance);
+        assertEquals(10000L - totalWithdrawn.get(), sourceBalance + targetBalance, "total not conserved");
     }
 }

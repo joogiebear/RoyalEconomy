@@ -7,8 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MoneyTest {
 
-    // --- parse ---
-
     @Test
     void parseValidTwoDigits() {
         assertEquals(123450L, Money.parse("1234.50", 2));
@@ -86,8 +84,6 @@ class MoneyTest {
         assertThrows(NumberFormatException.class, () -> Money.parse("1.2.3", 2));
     }
 
-    // --- fromDouble ---
-
     @Test
     void fromDoubleBasic() {
         assertEquals(123450L, Money.fromDouble(1234.50, 2));
@@ -128,8 +124,6 @@ class MoneyTest {
         assertThrows(NumberFormatException.class, () -> Money.fromDouble(Double.MAX_VALUE, 0));
     }
 
-    // --- toDouble ---
-
     @Test
     void toDoubleBasic() {
         assertEquals(1234.50, Money.toDouble(123450L, 2), 1e-9);
@@ -138,8 +132,6 @@ class MoneyTest {
         assertEquals(1234.5678, Money.toDouble(12345678L, 4), 1e-9);
         assertEquals(1234.0, Money.toDouble(1234L, 0), 1e-9);
     }
-
-    // --- plain ---
 
     @Test
     void plainTwoDigits() {
@@ -169,8 +161,6 @@ class MoneyTest {
         assertEquals("-1,234.50", Money.plain(-123450L, 2));
         assertEquals("-0.05", Money.plain(-5L, 2));
     }
-
-    // --- round trip ---
 
     @Test
     void roundTripZeroDigits() {

@@ -15,7 +15,6 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,9 +50,7 @@ class JdbcAccountStoreTest {
 
     @Test
     void schemaCreationIsIdempotent() throws Exception {
-        // init was called in setUp; call it again
         store.init();
-        // still works
         UUID uuid = UUID.randomUUID();
         store.createIfAbsent(uuid, 100L);
         Map<UUID, Long> all = store.loadAll();
@@ -94,7 +91,6 @@ class JdbcAccountStoreTest {
         Map<UUID, Long> all = store.loadAll();
         assertEquals(1300L, all.get(uuid));
 
-        // verify ledger rows
         try (Connection connection = db.dataSource().getConnection();
              Statement statement = connection.createStatement();
              ResultSet rows = statement.executeQuery(
@@ -131,14 +127,12 @@ class JdbcAccountStoreTest {
 
         long before = ledgerCount();
 
-        // a batch where the second change has a null reason, which violates NOT NULL
         long now = System.currentTimeMillis();
         List<Change> batch = List.of(
                 new Change(a, 100L, 1100L, "ok", now),
                 new Change(b, 200L, 2200L, null, now + 1)
         );
 
-        // use a wrapper that will cause the SQL to fail on the null reason
         FailingStore failing = new FailingStore(store, batch);
         try {
             failing.apply(batch);
@@ -146,11 +140,9 @@ class JdbcAccountStoreTest {
             // expected
         }
 
-        // balances unchanged
         Map<UUID, Long> all = store.loadAll();
         assertEquals(1000L, all.get(a));
         assertEquals(2000L, all.get(b));
-        // no new ledger rows
         assertEquals(before, ledgerCount());
     }
 
@@ -162,6 +154,17 @@ class JdbcAccountStoreTest {
 
         Map<UUID, Long> all = store.loadAll();
         assertEquals(1000L, all.get(uuid));
+    }
+
+    @Test
+    void createAccountChangePersistsStartingBalance() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        long now = System.currentTimeMillis();
+        List<Change> batch = List.of(new Change(uuid, 500L, 500L, "create", now));
+        store.apply(batch);
+
+        Map<UUID, Long> all = store.loadAll();
+        assertEquals(500L, all.get(uuid));
     }
 
     private int ledgerCount() throws SQLException {
@@ -190,7 +193,6 @@ class JdbcAccountStoreTest {
         @Override
         public void apply(List<Change> changes) throws SQLException {
             if (changes.equals(trigger)) {
-                // simulate a mid-batch failure by throwing before any write
                 throw new SQLException("simulated failure");
             }
             delegate.apply(changes);

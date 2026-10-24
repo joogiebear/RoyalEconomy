@@ -43,6 +43,7 @@ public class MemoryEconomyService implements EconomyService {
         if (balances.putIfAbsent(account, new AtomicLong(startingBalance)) != null) {
             return false;
         }
+        pending.addLast(new Change(account, startingBalance, startingBalance, "create", clock.getAsLong()));
         return true;
     }
 
@@ -57,22 +58,24 @@ public class MemoryEconomyService implements EconomyService {
         if (amount <= 0) {
             return new Result(Status.INVALID_AMOUNT, 0);
         }
-        AtomicLong bal = balances.get(account);
-        if (bal == null) {
-            return new Result(Status.NO_ACCOUNT, 0);
-        }
-        long old;
-        long next;
-        do {
-            old = bal.get();
+        ReentrantLock lock = lockFor(account);
+        lock.lock();
+        try {
+            AtomicLong bal = balances.get(account);
+            if (bal == null) {
+                return new Result(Status.NO_ACCOUNT, 0);
+            }
+            long old = bal.get();
             if (old > maxBalance - amount) {
                 return new Result(Status.OVERFLOW, old);
             }
-            next = old + amount;
-        } while (!bal.compareAndSet(old, next));
-
-        pending.addLast(new Change(account, amount, next, reason, clock.getAsLong()));
-        return new Result(Status.OK, next);
+            long next = old + amount;
+            bal.set(next);
+            pending.addLast(new Change(account, amount, next, reason, clock.getAsLong()));
+            return new Result(Status.OK, next);
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
@@ -80,22 +83,24 @@ public class MemoryEconomyService implements EconomyService {
         if (amount <= 0) {
             return new Result(Status.INVALID_AMOUNT, 0);
         }
-        AtomicLong bal = balances.get(account);
-        if (bal == null) {
-            return new Result(Status.NO_ACCOUNT, 0);
-        }
-        long old;
-        long next;
-        do {
-            old = bal.get();
+        ReentrantLock lock = lockFor(account);
+        lock.lock();
+        try {
+            AtomicLong bal = balances.get(account);
+            if (bal == null) {
+                return new Result(Status.NO_ACCOUNT, 0);
+            }
+            long old = bal.get();
             if (old < amount) {
                 return new Result(Status.INSUFFICIENT_FUNDS, old);
             }
-            next = old - amount;
-        } while (!bal.compareAndSet(old, next));
-
-        pending.addLast(new Change(account, -amount, next, reason, clock.getAsLong()));
-        return new Result(Status.OK, next);
+            long next = old - amount;
+            bal.set(next);
+            pending.addLast(new Change(account, -amount, next, reason, clock.getAsLong()));
+            return new Result(Status.OK, next);
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
@@ -106,24 +111,34 @@ public class MemoryEconomyService implements EconomyService {
         if (newBalance > maxBalance) {
             return new Result(Status.OVERFLOW, 0);
         }
-        AtomicLong bal = balances.get(account);
-        if (bal == null) {
-            return new Result(Status.NO_ACCOUNT, 0);
+        ReentrantLock lock = lockFor(account);
+        lock.lock();
+        try {
+            AtomicLong bal = balances.get(account);
+            if (bal == null) {
+                return new Result(Status.NO_ACCOUNT, 0);
+            }
+            long old = bal.get();
+            long delta = newBalance - old;
+            bal.set(newBalance);
+            pending.addLast(new Change(account, delta, newBalance, reason, clock.getAsLong()));
+            return new Result(Status.OK, newBalance);
+        } finally {
+            lock.unlock();
         }
-        long old;
-        do {
-            old = bal.get();
-        } while (!bal.compareAndSet(old, newBalance));
-
-        long delta = newBalance - old;
-        pending.addLast(new Change(account, delta, newBalance, reason, clock.getAsLong()));
-        return new Result(Status.OK, newBalance);
     }
 
     @Override
     public Result transfer(UUID from, UUID to, long amount, String reason) {
         if (amount <= 0) {
             return new Result(Status.INVALID_AMOUNT, 0);
+        }
+        if (from.equals(to)) {
+            AtomicLong bal = balances.get(from);
+            if (bal == null) {
+                return new Result(Status.NO_ACCOUNT, 0);
+            }
+            return new Result(Status.OK, bal.get());
         }
 
         UUID first = from.compareTo(to) <= 0 ? from : to;
@@ -153,8 +168,8 @@ public class MemoryEconomyService implements EconomyService {
                 return new Result(Status.OVERFLOW, toBalance);
             }
 
-            fromBal.addAndGet(-amount);
-            toBal.addAndGet(amount);
+            fromBal.set(fromBalance - amount);
+            toBal.set(toBalance + amount);
 
             long now = clock.getAsLong();
             pending.addLast(new Change(from, -amount, fromBalance - amount, reason, now));

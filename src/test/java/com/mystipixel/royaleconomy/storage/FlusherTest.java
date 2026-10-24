@@ -19,11 +19,13 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FlusherTest {
 
@@ -56,9 +58,8 @@ class FlusherTest {
         future.get();
 
         assertEquals(1, store.applyCalls);
-        assertEquals(1, store.lastBatch.size());
-        assertEquals(500L, store.lastBatch.get(0).delta());
-        // queue is now empty
+        assertEquals(2, store.lastBatch.size());
+        assertEquals(500L, store.lastBatch.get(1).delta());
         assertTrue(economy.drainChanges().isEmpty());
     }
 
@@ -70,7 +71,7 @@ class FlusherTest {
     }
 
     @Test
-    void flushOnceRequeuesOnFailure() throws Exception {
+    void flushOnceRequeuesOnSqlException() throws Exception {
         UUID uuid = UUID.randomUUID();
         economy.createAccount(uuid);
         economy.deposit(uuid, 100L, "test");
@@ -80,10 +81,25 @@ class FlusherTest {
         future.get();
 
         assertEquals(1, store.applyCalls);
-        // changes were requeued
         List<Change> pending = economy.drainChanges();
-        assertEquals(1, pending.size());
-        assertEquals(100L, pending.get(0).delta());
+        assertEquals(2, pending.size());
+        assertEquals(100L, pending.get(1).delta());
+    }
+
+    @Test
+    void flushOnceRequeuesOnRuntimeException() throws Exception {
+        UUID uuid = UUID.randomUUID();
+        economy.createAccount(uuid);
+        economy.deposit(uuid, 200L, "test");
+
+        store.throwRuntime = true;
+        CompletableFuture<Void> future = flusher.flushOnce();
+        future.get();
+
+        assertEquals(1, store.applyCalls);
+        List<Change> pending = economy.drainChanges();
+        assertEquals(2, pending.size());
+        assertEquals(200L, pending.get(1).delta());
     }
 
     @Test
@@ -97,7 +113,7 @@ class FlusherTest {
         flusher.flushNow(Duration.ofSeconds(5));
 
         assertEquals(1, store.applyCalls);
-        assertEquals(3, store.lastBatch.size());
+        assertEquals(4, store.lastBatch.size());
         assertTrue(economy.drainChanges().isEmpty());
     }
 
@@ -107,7 +123,6 @@ class FlusherTest {
         economy.createAccount(uuid);
         economy.deposit(uuid, 100L, "test");
 
-        // first call fails, second succeeds
         store.failNext = true;
         flusher.flushNow(Duration.ofSeconds(5));
 
@@ -121,15 +136,13 @@ class FlusherTest {
         economy.createAccount(uuid);
         economy.deposit(uuid, 100L, "test");
 
-        // always fail: flushNow should give up after timeout
         store.alwaysFail = true;
         long start = System.nanoTime();
         flusher.flushNow(Duration.ofMillis(200));
         long elapsed = System.nanoTime() - start;
 
         assertTrue(elapsed < 5_000_000_000L, "should not run for 5 seconds");
-        // changes are still in the queue
-        assertEquals(1, economy.drainChanges().size());
+        assertEquals(2, economy.drainChanges().size());
     }
 
     static class FakeStore implements AccountStore {
@@ -137,6 +150,7 @@ class FlusherTest {
         List<Change> lastBatch;
         boolean failNext;
         boolean alwaysFail;
+        boolean throwRuntime;
 
         @Override
         public Map<UUID, Long> loadAll() {
@@ -147,6 +161,10 @@ class FlusherTest {
         public void apply(List<Change> changes) throws SQLException {
             applyCalls++;
             lastBatch = changes;
+            if (throwRuntime) {
+                throwRuntime = false;
+                throw new RuntimeException("simulated runtime failure");
+            }
             if (alwaysFail || failNext) {
                 failNext = false;
                 throw new SQLException("simulated failure");

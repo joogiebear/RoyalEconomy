@@ -7,13 +7,9 @@ import com.mystipixel.royaleconomy.core.EconomyService;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Logger;
 
 public final class Flusher {
@@ -41,7 +37,7 @@ public final class Flusher {
         return db.submit("flush " + changes.size() + " changes", () -> {
             try {
                 store.apply(changes);
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 logger.warning("Failed to flush " + changes.size() + " changes: " + e.getMessage());
                 economy.requeue(changes);
             }
@@ -62,23 +58,25 @@ public final class Flusher {
     public void flushNow(Duration timeout) {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
-            CompletableFuture<Void> future = flushOnce();
-            if (future.isDone()) {
-                return;
-            }
-            long remaining = deadline - System.nanoTime();
-            if (remaining <= 0) {
+            List<Change> changes = economy.drainChanges();
+            if (changes.isEmpty()) {
                 return;
             }
             try {
-                future.get(remaining, TimeUnit.NANOSECONDS);
-            } catch (TimeoutException e) {
-                return;
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            } catch (ExecutionException e) {
-                // the callback swallows SQLException; this path is unreachable in normal operation
+                store.apply(changes);
+            } catch (Exception e) {
+                logger.warning("Failed to flush " + changes.size() + " changes: " + e.getMessage());
+                economy.requeue(changes);
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    return;
+                }
+                try {
+                    Thread.sleep(Math.min(50, remaining / 1_000_000));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
             }
         }
     }

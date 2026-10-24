@@ -25,7 +25,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
 public final class RoyalEconomyPlugin extends JavaPlugin implements Listener {
@@ -70,8 +69,7 @@ public final class RoyalEconomyPlugin extends JavaPlugin implements Listener {
             long startingBalance = Money.fromDouble(getConfig().getDouble("currency.starting-balance", 0), digits);
             long maxBalanceRaw = Money.fromDouble(getConfig().getDouble("currency.max-balance", 0), digits);
             long maxBalance = maxBalanceRaw == 0 ? Long.MAX_VALUE : maxBalanceRaw;
-            AtomicLong clock = new AtomicLong(System.currentTimeMillis());
-            service = new MemoryEconomyService(startingBalance, maxBalance, clock::incrementAndGet);
+            service = new MemoryEconomyService(startingBalance, maxBalance, System::currentTimeMillis);
             service.load(accounts);
 
             String symbol = getConfig().getString("currency.symbol", "$");

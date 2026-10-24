@@ -73,12 +73,10 @@ public final class VaultEconomy implements Economy {
         return List.of();
     }
 
-    // --- String-name player methods (resolve via Bukkit.getOfflinePlayer) ---
-
     @Override
     public boolean hasAccount(String player) {
-        OfflinePlayer offline = Bukkit.getOfflinePlayer(player);
-        return service.hasAccount(offline.getUniqueId());
+        OfflinePlayer offline = Bukkit.getOfflinePlayerIfCached(player);
+        return offline != null && service.hasAccount(offline.getUniqueId());
     }
 
     @Override
@@ -98,7 +96,10 @@ public final class VaultEconomy implements Economy {
 
     @Override
     public double getBalance(String player) {
-        OfflinePlayer offline = Bukkit.getOfflinePlayer(player);
+        OfflinePlayer offline = Bukkit.getOfflinePlayerIfCached(player);
+        if (offline == null) {
+            return 0;
+        }
         return Money.toDouble(service.balance(offline.getUniqueId()), digits);
     }
 
@@ -119,7 +120,10 @@ public final class VaultEconomy implements Economy {
 
     @Override
     public boolean has(String player, double amount) {
-        OfflinePlayer offline = Bukkit.getOfflinePlayer(player);
+        OfflinePlayer offline = Bukkit.getOfflinePlayerIfCached(player);
+        if (offline == null) {
+            return false;
+        }
         return has(offline, amount);
     }
 
@@ -149,7 +153,10 @@ public final class VaultEconomy implements Economy {
 
     @Override
     public EconomyResponse withdrawPlayer(String player, double amount) {
-        OfflinePlayer offline = Bukkit.getOfflinePlayer(player);
+        OfflinePlayer offline = Bukkit.getOfflinePlayerIfCached(player);
+        if (offline == null) {
+            return new EconomyResponse(0, 0, EconomyResponse.ResponseType.FAILURE, "player not found");
+        }
         return withdrawPlayer(offline, amount);
     }
 
@@ -180,7 +187,10 @@ public final class VaultEconomy implements Economy {
 
     @Override
     public EconomyResponse depositPlayer(String player, double amount) {
-        OfflinePlayer offline = Bukkit.getOfflinePlayer(player);
+        OfflinePlayer offline = Bukkit.getOfflinePlayerIfCached(player);
+        if (offline == null) {
+            return new EconomyResponse(0, 0, EconomyResponse.ResponseType.FAILURE, "player not found");
+        }
         return depositPlayer(offline, amount);
     }
 
@@ -211,7 +221,10 @@ public final class VaultEconomy implements Economy {
 
     @Override
     public boolean createPlayerAccount(String player) {
-        OfflinePlayer offline = Bukkit.getOfflinePlayer(player);
+        OfflinePlayer offline = Bukkit.getOfflinePlayerIfCached(player);
+        if (offline == null) {
+            return false;
+        }
         return service.createAccount(offline.getUniqueId());
     }
 
@@ -229,8 +242,6 @@ public final class VaultEconomy implements Economy {
     public boolean createPlayerAccount(OfflinePlayer player, String world) {
         return createPlayerAccount(player);
     }
-
-    // --- Bank methods (all NOT_IMPLEMENTED) ---
 
     @Override
     public EconomyResponse createBank(String name, String player) {
@@ -286,8 +297,6 @@ public final class VaultEconomy implements Economy {
     public EconomyResponse isBankMember(String bank, OfflinePlayer player) {
         return notImplemented();
     }
-
-    // --- helpers ---
 
     private EconomyResponse notImplemented() {
         return new EconomyResponse(0, 0, EconomyResponse.ResponseType.NOT_IMPLEMENTED, "");

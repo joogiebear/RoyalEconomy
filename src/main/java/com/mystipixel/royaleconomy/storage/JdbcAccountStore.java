@@ -24,25 +24,22 @@ public final class JdbcAccountStore implements AccountStore {
     private final Dialect dialect;
     private final String accountsTable;
     private final String ledgerTable;
+    private final String tablePrefix;
 
     public JdbcAccountStore(TxRunner db, String tablePrefix) {
         this.db = db;
         this.dialect = db.dialect();
+        this.tablePrefix = tablePrefix;
         this.accountsTable = tablePrefix + "accounts";
         this.ledgerTable = tablePrefix + "ledger";
     }
 
     public void init() throws SQLException {
-        new SchemaVersion(db, tablePrefixOf(accountsTable)).ensure(SCHEMA_VERSION, (connection, d, from, to) -> {
+        new SchemaVersion(db, tablePrefix).ensure(SCHEMA_VERSION, (connection, d, from, to) -> {
             if (from < 1) {
                 createTables(connection);
             }
         });
-    }
-
-    private static String tablePrefixOf(String tableName) {
-        int idx = tableName.lastIndexOf('_');
-        return idx > 0 ? tableName.substring(0, idx) : tableName;
     }
 
     private void createTables(Connection connection) throws SQLException {
