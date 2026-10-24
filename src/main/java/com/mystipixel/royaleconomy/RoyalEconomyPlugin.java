@@ -87,6 +87,7 @@ public final class RoyalEconomyPlugin extends JavaPlugin implements Listener {
             int baltopRefreshSeconds = getConfig().getInt("persistence.baltop-refresh-seconds", 60);
             int baltopPageSize = getConfig().getInt("persistence.baltop-page-size", 10);
             BaltopCommand baltopCommand = new BaltopCommand(service, messages, digits, baltopPageSize);
+            baltopCommand.refresh();
             baltopTaskId = getServer().getScheduler().runTaskTimer(this, () ->
                     dbExecutor.submit("baltop refresh", baltopCommand::refresh),
                     baltopRefreshSeconds * 20L, baltopRefreshSeconds * 20L).getTaskId();

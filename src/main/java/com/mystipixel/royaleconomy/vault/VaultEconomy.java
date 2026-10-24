@@ -7,9 +7,10 @@ import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.List;
-import java.util.Locale;
+import java.util.Optional;
 
 public final class VaultEconomy implements Economy {
 
@@ -318,26 +319,24 @@ public final class VaultEconomy implements Economy {
         return new EconomyResponse(Money.toDouble(result.balance(), digits), 0, type, "");
     }
 
+    private static final StackWalker WALKER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+
     private String callingPluginName() {
-        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-        for (StackTraceElement element : stack) {
-            String cls = element.getClassName();
-            if (cls.startsWith("com.mystipixel.royaleconomy.")
-                    || cls.startsWith("org.bukkit.")
-                    || cls.startsWith("java.")
-                    || cls.startsWith("jdk.")
-                    || cls.startsWith("sun.")
-                    || cls.startsWith("net.milkbowl.")
-                    || cls.startsWith("com.destroystoys.")
-                    || cls.startsWith("io.papermc.")) {
-                continue;
-            }
-            String[] parts = cls.split("\\.");
-            if (parts.length >= 2) {
-                return (parts[0] + "." + parts[1]).toLowerCase(Locale.ROOT);
-            }
-            return "vault";
+        ClassLoader own = getClass().getClassLoader();
+        return WALKER.walk(frames -> frames
+                .map(StackWalker.StackFrame::getDeclaringClass)
+                .filter(c -> c.getClassLoader() != own)
+                .map(VaultEconomy::pluginOf)
+                .flatMap(Optional::stream)
+                .findFirst())
+                .orElse("vault");
+    }
+
+    private static Optional<String> pluginOf(Class<?> type) {
+        try {
+            return Optional.of(JavaPlugin.getProvidingPlugin(type).getName());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return Optional.empty();
         }
-        return "vault";
     }
 }
