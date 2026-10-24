@@ -1,0 +1,14 @@
+{
+  "name": "RoyalEconomy: balances survive a restart",
+  "instance": "econ-a",
+  "bots": ["alice", "bob", "carol"],
+  "steps": [
+    { "bot": "alice", "command": "/balance" },
+    { "bot": "alice", "expectMessage": "/960[.]00/" },
+    { "bot": "bob", "command": "/balance" },
+    { "bot": "bob", "expectMessage": "/1,040[.]00/" },
+    { "bot": "carol", "command": "/balance" },
+    { "bot": "carol", "expectMessage": "/100[.]00/" },
+    { "expectLog": { "absent": "/Exception|SEVERE|ERROR.: .Royal/" } }
+  ]
+}

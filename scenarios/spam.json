@@ -1,0 +1,21 @@
+{
+  "name": "RoyalEconomy: crossing pays conserve money",
+  "instance": "econ-a",
+  "bots": ["alice", "bob"],
+  "setup": ["eco set alice 1000", "eco set bob 1000"],
+  "steps": [
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/pay bob 7" }, { "bot": "bob", "command": "/pay alice 3" },
+    { "bot": "alice", "command": "/balance" },
+    { "bot": "alice", "expectMessage": "/You have/" },
+    { "expectLog": { "absent": "/Exception|SEVERE|ERROR.: .Royal/" } }
+  ]
+}
